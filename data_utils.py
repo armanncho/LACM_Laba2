@@ -3,50 +3,81 @@ from sklearn.datasets import make_classification
 from sklearn.model_selection import train_test_split
 
 
-def prepare_data():
+def get_prepared_data():
+    """Формирует и нормализует выборку для базового классификатора."""
+    # Генерация синтетических данных с заданными параметрами
     features, labels = make_classification(
         n_samples=500,
         n_features=2,
         n_redundant=0,
         n_informative=2,
-        random_state=123,
+        random_state=42,
         n_clusters_per_class=1
     )
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        features, labels, test_size=0.30, stratify=labels, random_state=123
+    # Разбиение с сохранением долей классов
+    train_x, test_x, train_y, test_y = train_test_split(
+        features, labels, test_size=0.3, stratify=labels, random_state=42
     )
-    return X_train, X_test, y_train, y_test
+
+    # Применение Z-score нормализации
+    # Используем статистику обучающей выборки для обоих наборов
+    mu = train_x.mean(axis=0)
+    sigma = train_x.std(axis=0)
+
+    # Защита от деления на нулевое отклонение
+    sigma = np.maximum(sigma, 1e-8)
+
+    train_x_scaled = (train_x - mu) / sigma
+    test_x_scaled = (test_x - mu) / sigma
+
+    return [train_x_scaled, test_x_scaled, train_y, test_y]
 
 
-def standardize_data(X_train, X_test=None):
-    mu_train = np.mean(X_train, axis=0)
-    sigma_train = np.std(X_train, axis=0)
+def generate_custom_data(dataset_type='linear', n_samples=500, noise_rate=0.05):
+    """
+    Создает кастомные наборы данных (linear, xor, circle).
+    """
+    np.random.seed(42)
 
-    train_normalized = (X_train - mu_train) / sigma_train
-    if X_test is not None:
-        test_normalized = (X_test - mu_train) / sigma_train
-        return train_normalized, test_normalized
-    return train_normalized
+    if dataset_type == 'linear':
+        group_size = n_samples // 2
+        # Генерируем два гауссовых облака
+        data_0 = np.random.randn(group_size, 2) + np.array([2, 2])
+        data_1 = np.random.randn(group_size, 2) + np.array([-2, -2])
+        X = np.concatenate([data_0, data_1])
+        y = np.concatenate([np.zeros(group_size), np.ones(group_size)])
 
+    elif dataset_type == 'xor':
+        # XOR распределение: 4 группы в углах
+        chunk = n_samples // 4
+        X = np.concatenate([
+            np.random.randn(chunk, 2) * 0.7 + np.array([2, 2]),
+            np.random.randn(chunk, 2) * 0.7 + np.array([-2, -2]),
+            np.random.randn(chunk, 2) * 0.7 + np.array([2, -2]),
+            np.random.randn(chunk, 2) * 0.7 + np.array([-2, 2])
+        ])
+        y = np.concatenate([np.zeros(2 * chunk), np.ones(2 * chunk)])
 
-def generate_custom_data(pattern='linear', n_samples=500, noise=0.05):
-    np.random.seed(123)
-    if pattern == 'linear':
-        X1 = np.random.randn(n_samples // 2, 2) + np.array([2, 2])
-        X2 = np.random.randn(n_samples // 2, 2) + np.array([-2, -2])
-        X = np.vstack((X1, X2))
-        y = np.hstack((np.zeros(n_samples // 2), np.ones(n_samples // 2)))
-    elif pattern == 'xor':
-        X = np.random.randn(n_samples, 2)
-        y = np.logical_xor(X[:, 0] > 0, X[:, 1] > 0).astype(int)
-    elif pattern == 'circle':
-        X = np.random.randn(n_samples, 2) * 2
-        radius = np.sqrt(X[:, 0] ** 2 + X[:, 1] ** 2)
-        y = (radius > 2.0).astype(int)
+    elif dataset_type == 'circle':
+        # Концентрические окружности
+        half = n_samples // 2
+        # Внутренний круг
+        radii_0 = np.random.rand(half) * 1.5
+        theta_0 = np.random.rand(half) * 2 * np.pi
+        X0 = np.stack([radii_0 * np.cos(theta_0), radii_0 * np.sin(theta_0)], axis=1)
+        # Внешнее кольцо
+        radii_1 = 2.5 + np.random.rand(half) * 1.5
+        theta_1 = np.random.rand(half) * 2 * np.pi
+        X1 = np.stack([radii_1 * np.cos(theta_1), radii_1 * np.sin(theta_1)], axis=1)
 
-    if noise > 0:
-        flip_mask = np.random.rand(n_samples) < noise
-        y[flip_mask] = 1 - y[flip_mask]
+        X = np.concatenate([X0, X1])
+        y = np.concatenate([np.zeros(half), np.ones(half)])
+
+    # Внесение случайных искажений в метки
+    if noise_rate > 0:
+        flip_count = int(n_samples * noise_rate)
+        flip_indices = np.random.choice(n_samples, flip_count, replace=False)
+        y[flip_indices] = 1 - y[flip_indices]
 
     return X, y

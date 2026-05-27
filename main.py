@@ -1,55 +1,73 @@
-from data_utils import prepare_data, standardize_data
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Импортируем обновленные модули
+from data_utils import get_prepared_data, generate_custom_data
+from sklearn.model_selection import train_test_split
 from perceptron import Perceptron
-from metrics import calculate_accuracy, calculate_advanced_metrics, plot_loss, plot_decision_boundary, plot_roc
-from experiment import experiment_learning_rate, experiment_custom_data, experiment_loss_functions, \
-    experiment_momentum, experiment_l2_regularization
-from cross_validation import grid_search_cv
+from metrics import display_performance_report, render_roc_space, render_learning_curves, draw_boundary_map
+from experiment import run_all_diagnostics
+from cross_validation import perform_grid_optimization
 
 
-def main():
-    print("--- 1. Инициализация и подготовка данных ---")
-    X_tr, X_te, y_tr, y_te = prepare_data()
-    X_tr_norm, X_te_norm = standardize_data(X_tr, X_te)
+def run_research_pipeline():
+    """Главная точка входа исследовательской системы."""
 
-    print("\n--- 2. Старт обучения базовой модели ---")
-    base_model = Perceptron()
-    loss_history = base_model.fit(X_tr_norm, y_tr, X_te_norm, y_te, epochs=100, lr=0.1, batch_size=32)
+    print("\n--- ИССЛЕДОВАТЕЛЬСКАЯ СИСТЕМА ПЕРЦЕПТРОНА ---")
+    print("Выберите конфигурацию данных:")
+    print(" 1: Стандартный набор данных (make_classification)")
+    print(" 2: Синтетические данные (Linear / XOR / Circle)")
+    print(" 0: Завершение работы")
 
-    print("\n--- 3. Оценка качества и доп. метрики ---")
-    preds_te = base_model.predict(X_te_norm)
-    probs_te = base_model.predict_proba(X_te_norm)
+    while True:
+        choice = input(">> Ваш выбор: ")
+        if choice in ['1', '2', '0']: break
+        print("Некорректный ввод. Попробуйте снова.")
 
-    acc_test = calculate_accuracy(y_te, preds_te)
-    p, r, f1, roc_auc = calculate_advanced_metrics(y_te, preds_te, probs_te)
+    if choice == '0': return
 
-    print(f"Accuracy:  {acc_test:.4f}")
-    print(f"Precision: {p:.4f}")
-    print(f"Recall:    {r:.4f}")
-    print(f"F1-score:  {f1:.4f}")
-    print(f"ROC-AUC:   {roc_auc:.4f}")
+    # Инициализация данных
+    if choice == '1':
+        X_train, X_test, y_train, y_test = get_prepared_data()
+        X_full = np.vstack((X_train, X_test))
+        y_full = np.hstack((y_train, y_test))
+    else:
+        print("\nТипы: 1: Linear, 2: XOR, 3: Circle")
+        type_map = {'1': 'linear', '2': 'xor', '3': 'circle'}
+        choice_type = input("Введите тип (1-3): ")
 
-    print("\n--- 4. Отрисовка графиков ---")
-    plot_loss(loss_history)
-    plot_decision_boundary(base_model, X_te_norm, y_te, highlight_errors=True)
-    plot_roc(y_te, probs_te)
+        raw_x, raw_y = generate_custom_data(dataset_type=type_map.get(choice_type, 'linear'))
+        X_train, X_test, y_train, y_test = train_test_split(raw_x, raw_y, test_size=0.3, stratify=raw_y)
 
-    print("\n--- 5. Кросс-валидация ---")
-    best_params = grid_search_cv(X_tr_norm, y_tr)
-    print(f"Лучшие параметры: {best_params}")
+        # Ручная нормализация
+        mu, sigma = X_train.mean(axis=0), X_train.std(axis=0)
+        X_train, X_test = (X_train - mu) / sigma, (X_test - mu) / sigma
+        X_full, y_full = raw_x, raw_y
 
-    print("\n--- 6. Дополнительные эксперименты ---")
-    print("\n[Моментум]")
-    experiment_momentum(X_tr_norm, y_tr, X_te_norm, y_te)
+    # Этап 1: Оптимизация параметров
+    print("\n[STEP 1] Запуск этапа автоматической оптимизации...")
+    best_step, best_chunk, _, _ = perform_grid_optimization(X_full, y_full)
 
-    print("\n[Функции потерь: BCE vs Hinge]")
-    experiment_loss_functions(X_tr_norm, y_tr, X_te_norm, y_te)
+    # Этап 2: Финальное обучение
+    model = Perceptron(momentum=0.9)
+    print(f"\n[STEP 2] Обучение модели (step={best_step}, chunk={best_chunk})...")
+    train_h, test_h = model.fit(
+        X_train, y_train, X_test, y_test,
+        total_epochs=100, step_size=best_step, chunk_size=best_chunk
+    )
 
-    print("\n[L2 Регуляризация]")
-    experiment_l2_regularization(X_tr_norm, y_tr, X_te_norm, y_te)
+    # Этап 3: Анализ качества
+    render_learning_curves(train_h, test_h)
+    draw_boundary_map(model, X_test, y_test)
 
-    print("\n[Кастомные датасеты]")
-    experiment_custom_data()
+    preds = model.classify(X_test)
+    display_performance_report(y_test, preds, model.predict_probs(X_test))
+    render_roc_space(y_test, model.predict_probs(X_test))
+
+    # Этап 4: Глубокие исследования
+    print("\n[STEP 3] Запуск диагностических процедур...")
+    run_all_diagnostics(X_train, y_train, X_test, y_test)
 
 
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    run_research_pipeline()

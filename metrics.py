@@ -1,65 +1,66 @@
-import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.metrics import precision_score, recall_score, f1_score, roc_auc_score, roc_curve
+import numpy as np
+from sklearn import metrics
 
 
-def calculate_accuracy(y_true, y_pred):
-    return (y_true == y_pred).mean()
+def display_performance_report(actual, predicted, probabilities):
+    """Выводит красиво оформленную сводку метрик качества."""
+    print("\n" + "=" * 30)
+    print(" ОТЧЕТ О КАЧЕСТВЕ МОДЕЛИ ")
+    print("=" * 30)
+    print(f"Доля верных ответов: {metrics.accuracy_score(actual, predicted):.4f}")
+    print(f"Точность (Precision): {metrics.precision_score(actual, predicted):.4f}")
+    print(f"Полнота (Recall):     {metrics.recall_score(actual, predicted):.4f}")
+    print(f"F1-мера:              {metrics.f1_score(actual, predicted):.4f}")
+    print(f"Площадь под кривой:   {metrics.roc_auc_score(actual, probabilities):.4f}")
+    print("=" * 30 + "\n")
 
 
-def calculate_advanced_metrics(y_true, y_pred, y_prob):
-    p = precision_score(y_true, y_pred)
-    r = recall_score(y_true, y_pred)
-    f1 = f1_score(y_true, y_pred)
-    roc_auc = roc_auc_score(y_true, y_prob)
-    return p, r, f1, roc_auc
+def render_learning_curves(train_history, test_history=None):
+    """Строит графики изменения функции ошибки."""
+    plt.style.use('seaborn-v0_8-darkgrid')
+    fig, ax = plt.subplots(figsize=(10, 6))
 
+    ax.plot(train_history, label='Обучающая выборка', linewidth=2)
+    if test_history:
+        ax.plot(test_history, label='Тестовая выборка', linewidth=2, linestyle='--')
 
-def plot_loss(history, title='Динамика функции потерь'):
-    plt.figure(figsize=(9, 6))
-    plt.plot(history['train_loss'], label='Обучающая', color='darkblue', linewidth=2)
-    plt.plot(history['val_loss'], label='Валидационная', color='darkorange', linewidth=2)
-    plt.title(title)
-    plt.xlabel('Количество эпох')
-    plt.ylabel('Loss')
-    plt.legend(loc='upper right')
-    plt.grid(True, linestyle=':', alpha=0.8)
+    ax.set_title('Динамика функции потерь', fontsize=14)
+    ax.set_xlabel('Эпохи обучения', fontsize=12)
+    ax.set_ylabel('Значение Loss', fontsize=12)
+    ax.legend()
+    plt.tight_layout()
     plt.show()
 
 
-def plot_decision_boundary(model, X, y, highlight_errors=False):
+def draw_boundary_map(model, X, y):
+    """Отрисовка данных и найденной разделяющей гиперплоскости."""
     plt.figure(figsize=(9, 6))
-    plt.scatter(X[:, 0], X[:, 1], c=y, cmap='RdYlBu', edgecolors='white', s=60, alpha=0.85)
+    # Разброс точек
+    plt.scatter(X[:, 0], X[:, 1], c=y, cmap='coolwarm', s=50, alpha=0.7, edgecolors='white')
 
-    if highlight_errors:
-        preds = model.predict(X)
-        errors = X[y != preds]
-        plt.scatter(errors[:, 0], errors[:, 1], facecolors='none', edgecolors='lime', s=150, linewidths=2,
-                    label='Ошибки')
+    # Расчет границы: weights[0]*x + weights[1]*y + bias = 0
+    lims = np.array([X[:, 0].min() - 0.5, X[:, 0].max() + 0.5])
+    decision_line = -(model.weights[0] * lims + model.bias) / model.weights[1]
 
-    x_min, x_max = X[:, 0].min() - 0.5, X[:, 0].max() + 0.5
-    bound_x = np.array([x_min, x_max])
-
-    if model.w[1] != 0:
-        bound_y = -(model.w[0] * bound_x + model.b) / model.w[1]
-        plt.plot(bound_x, bound_y, color='black', linestyle='--', linewidth=2.5, label='Граница классов')
-        plt.ylim(X[:, 1].min() - 0.5, X[:, 1].max() + 0.5)
-
-    plt.xlim(x_min, x_max)
+    plt.plot(lims, decision_line, color='darkgreen', lw=2.5, label='Граница решения')
+    plt.title('Геометрия разделения признакового пространства')
     plt.legend()
+    plt.grid(True, linestyle=':', alpha=0.6)
     plt.show()
 
 
-def plot_roc(y_true, y_prob):
-    fpr, tpr, _ = roc_curve(y_true, y_prob)
-    auc_val = roc_auc_score(y_true, y_prob)
+def render_roc_space(actual, probabilities):
+    """Строит ROC-кривую в координатах TPR/FPR."""
+    fpr, tpr, _ = metrics.roc_curve(actual, probabilities)
+    score = metrics.roc_auc_score(actual, probabilities)
+
     plt.figure(figsize=(7, 7))
-    plt.plot(fpr, tpr, color='purple', lw=2, label=f'ROC curve (AUC = {auc_val:.3f})')
-    plt.plot([0, 1], [0, 1], color='gray', lw=2, linestyle='--')
-    plt.xlim([0.0, 1.0])
-    plt.ylim([0.0, 1.05])
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.legend(loc="lower right")
-    plt.grid(True, linestyle=':', alpha=0.8)
+    plt.plot(fpr, tpr, color='crimson', lw=2, label=f'Модель (AUC={score:.2f})')
+    plt.plot([0, 1], [0, 1], color='navy', linestyle='--', alpha=0.5)
+    plt.title('Пространство ROC-анализа')
+    plt.xlabel('Доля ложноположительных (FPR)')
+    plt.ylabel('Доля истинно положительных (TPR)')
+    plt.legend(loc='lower right')
+    plt.grid(True, alpha=0.3)
     plt.show()
